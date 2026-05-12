@@ -5,14 +5,14 @@ const Io = std.Io;
 const zmem = @import("zmem");
 const clap = @import("clap");
 
-fn get_memory_map(io: Io, pid: usize, allocator: std.mem.Allocator, buf: *std.ArrayListAligned(u8, null)) !void {
+fn get_memory_map(io: *const Io, pid: usize, allocator: std.mem.Allocator, buf: *std.ArrayListAligned(u8, null)) !void {
     var path_buf: [64]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buf, "/proc/{}/maps", .{pid});
-    const file = try Io.Dir.openFileAbsolute(io, path, .{ .mode = .read_only });
-    defer file.close(io);
+    const file = try Io.Dir.openFileAbsolute(io.*, path, .{ .mode = .read_only });
+    defer file.close(io.*);
 
     var file_buf: [4096]u8 = undefined;
-    var file_reader = file.reader(io, file_buf[0..]);
+    var file_reader = file.reader(io.*, file_buf[0..]);
     var reader = &file_reader.interface;
 
     var temp_buf: [4096]u8 = undefined;
@@ -82,7 +82,7 @@ pub fn main(init: std.process.Init) !void {
         var mmap_buf = try std.ArrayListAligned(u8, null).initCapacity(init.gpa, 4096);
         defer mmap_buf.deinit(init.gpa);
 
-        try get_memory_map(init.io, pid, init.gpa, &mmap_buf);
+        try get_memory_map(&init.io, pid, init.gpa, &mmap_buf);
         std.debug.print("{s}", .{mmap_buf.items});
 
         var mem_buf: [64]u8 = undefined;
