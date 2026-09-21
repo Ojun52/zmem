@@ -5,6 +5,66 @@ const Io = std.Io;
 const zmem = @import("zmem");
 const clap = @import("clap");
 
+const Permissions = struct {
+    read: bool,
+    write: bool,
+    execute: bool,
+    private: bool,
+};
+
+const MemoryRegion = struct {
+    start: usize,
+    end: usize,
+    perms: Permissions,
+    name: ?[]const u8,
+};
+
+fn parse_memory_region(line: []const u8) !MemoryRegion {
+    var it = std.mem.tokenizeAny(u8, line, " ");
+    const address = it.next().?;
+    var it_address = std.mem.splitAny(u8, address, "-");
+    const start = try std.fmt.parseInt(usize, it_address.next().?, 16);
+    const end = try std.fmt.parseInt(usize, it_address.next().?, 16);
+    const perms_str = it.next().?;
+    const perms = Permissions{
+        .read = perms_str[0] == 'r',
+        .write = perms_str[1] == 'w',
+        .execute = perms_str[2] == 'x',
+        .private = perms_str[3] == 'p',
+    };
+    _ = it.next();
+    _ = it.next();
+    _ = it.next();
+    const name = it.next();
+
+    return MemoryRegion{
+        .start = start,
+        .end = end,
+        .perms = perms,
+        .name = name,
+    };
+}
+
+test "parse normal memory region" {
+    const line =
+        "55ad4500d000-55ad45015000 r--p 00000000 00:23 3776985 /usr/lib/systemd/systemd";
+
+    const region = try parse_memory_region(line);
+
+    try std.testing.expectEqual(@as(usize, 0x55ad4500d000), region.start);
+    try std.testing.expectEqual(@as(usize, 0x55ad45015000), region.end);
+
+    try std.testing.expect(region.perms.read);
+    try std.testing.expect(!region.perms.write);
+    try std.testing.expect(!region.perms.execute);
+    try std.testing.expect(region.perms.private);
+
+    try std.testing.expectEqualStrings(
+        "/usr/lib/systemd/systemd",
+        region.name.?,
+    );
+}
+
 fn get_memory_map(io: *const Io, pid: usize, allocator: std.mem.Allocator, buf: *std.ArrayListAligned(u8, null)) !void {
     var path_buf: [64]u8 = undefined;
     const path = try std.fmt.bufPrint(&path_buf, "/proc/{}/maps", .{pid});
